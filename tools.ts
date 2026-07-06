@@ -49,14 +49,17 @@ const EventSchema = z.object({
         "The IANA time zone of the event. Example: Asia/Kolkata, America/New_York, Europe/London.",
       ),
   }),
-  description: z.string().describe("Optional details or agenda for the event."),
+  description: z
+    .string()
+    .optional()
+    .describe("Optional details or agenda for the event."),
   attendees: z
     .array(
       z.object({
         email: z
           .string()
           .describe(
-            "The attendee's email address exactly as provided by the user.",
+            "The attendee's email address. Use the address exactly as given by the user if they provided one, or the emailAddress from a search_googel_contact result if the email was looked up.",
           ),
         displayName: z
           .string()
@@ -147,7 +150,11 @@ export const createEventTool = tool(
     console.log(`-------------------------------------------------`);
     console.log(`llm respone data after creation -`, createEvent);
 
-    return "MEETING HAS BEEN SET ";
+    return {
+      status: "Meeting created successfully.",
+      meetingLink: createEvent.data.hangoutLink,
+      calendarEventLink: createEvent.data.htmlLink,
+    };
   },
   {
     name: "create_calender_event",
@@ -219,7 +226,7 @@ export const googelContactSearch = tool(
       });
       const result = await contact.people.searchContacts({
         query,
-        readMask: "names,emailAddresses",
+        readMask: "names,emailAddresses,phoneNumbers",
       });
       console.log(`Google Seach Contact tool run ...........`);
       const resultss = result.data.results;
@@ -229,13 +236,18 @@ export const googelContactSearch = tool(
         return "No contacts found.";
       }
       const personDATA = resultss[0]?.person;
+      const phoneNumber = personDATA?.phoneNumbers?.[0]?.value;
       const displayName = personDATA?.names?.[0]?.displayName;
       const emailAddress = personDATA?.emailAddresses?.[0]?.value;
-      if (!emailAddress) {
-        return "No email Address found of the given  contact";
-      }
+      // if (!emailAddress) {
+      //   return "No email Address found of the given  contact";
+      // }
+      // if (!phoneNumber) {
+      //   return "Phone Number of this person email has not found ";
+      // }
+
       console.log({ displayName, emailAddress });
-      return { displayName, emailAddress }; // these data will go to the llm then
+      return { displayName, emailAddress, phoneNumber }; // these data will go to the llm then
     } catch (err) {
       console.log(err);
     }
@@ -243,9 +255,10 @@ export const googelContactSearch = tool(
   {
     name: "search_googel_contact",
     description:
-      "Search the user's Google Contacts by name and return the contact's email address.",
+      "Search the user's Google Contacts by name and return the best matching contact's display name, email address, and phone number.",
     schema: z.object({
       query: z.string().describe("The name of the person to search for"),
     }),
   },
 );
+//================After this implemenatation of geneartion of email content //======================
