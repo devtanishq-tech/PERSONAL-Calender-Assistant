@@ -1,13 +1,18 @@
 import { tool } from "@langchain/core/tools";
 import { date, string, z } from "zod";
 import { google } from "googleapis";
-import { oauth2Client } from "./server.ts";
-import tokens from "./token.json";
-import { start } from "node:repl";
-import { create } from "node:domain";
+import { oauth2Client } from "./oauth.ts";
+import { TavilySearch } from "@langchain/tavily";
 import { v4 as uuidv4 } from "uuid";
+import { safebrowsing } from "googleapis/build/src/apis/safebrowsing/index";
+import { concatArrayBuffers } from "bun";
 //===============================Google calender inetegration inside the tools FUNCTIONS
-const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+const search = new TavilySearch({
+  maxResults: 5,
+  topic: "general",
+});
+const calendar = google.calendar({ version: "v3", auth: oauth2Client }); // Google Calender
+const contact = google.people({ version: "v1", auth: oauth2Client }); // Google Contact
 oauth2Client.setCredentials({
   access_token: process.env.GOOGLE_ACCESS_TOKEN,
   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
@@ -149,5 +154,98 @@ export const createEventTool = tool(
     description:
       "Use this tool to create a new calendar event or meeting. Call this tool whenever the user asks to schedule, book, arrange, add, or create an event in their calendar. Examples include meetings, interviews, appointments, reminders, or any event with a specified date, time, or location. Extract every event detail mentioned by the user, including the title, description, start time, end time, time zone, and attendees. If the user asks to invite one or more people, always extract every attendee's email address and display name and include them in the attendees array. Never omit an attendee when an invitation is requested. Return an empty attendees array only if the user does not mention anyone to invite.",
     schema: EventSchema,
+  },
+);
+//=========delete Calender tool
+export const deleteTool = tool(
+  async ({ query }) => {
+    const googleGetData = await calendar.events.list({
+      calendarId: "primary",
+      q: query,
+    });
+    console.log(`Delete event has used --------------------------------`);
+    const eventss = googleGetData.data.items;
+    if (!eventss || eventss.length === 0) {
+      return "No matching event found.";
+    }
+    const firstEvent = eventss[0];
+    if (!firstEvent || !firstEvent.id) {
+      return "Event ID not found.";
+    }
+    const dataDelete = await calendar.events.delete({
+      calendarId: "primary",
+      eventId: firstEvent.id,
+    });
+    console.log(`Date that deleted  is below mentioned : `);
+    console.log(dataDelete);
+    return "Data has been successFully Deleted";
+  },
+  {
+    name: "delete_Event",
+    description:
+      "Delete an event from the user's Google Calendar. Use this tool when the user wants to delete, cancel, or remove a calendar event. The tool accepts a search query, searches for matching events in the user's calendar, identifies the appropriate event, and deletes it.",
+    schema: z.object({
+      query: z.string(),
+    }),
+  },
+);
+//============delete calender tool
+
+export const tavilySearchTool = tool(
+  async ({ query }) => {
+    const webSearch = await search.invoke({ query });
+    console.log(`web search tool call hapeen ..........`);
+    console.log(webSearch);
+    return webSearch.results?.map((item: any) => item.content).join("\n\n");
+  },
+  {
+    name: "webSearch",
+    description:
+      "Search the web for current information such as news, facts, recent events, or topics not available in the model's knowledge.",
+    schema: z.object({
+      query: z.string().describe("The search query to execute."),
+    }),
+  },
+);
+
+//=====================================find contact tool //================================
+export const googelContactSearch = tool(
+  async ({ query }) => {
+    try {
+      // ths is warmpup request to the google , which basicallya activates the searchContact function
+      await contact.people.searchContacts({
+        query: "",
+        readMask: "names,emailAddresses",
+      });
+      const result = await contact.people.searchContacts({
+        query,
+        readMask: "names,emailAddresses",
+      });
+      console.log(`Google Seach Contact tool run ...........`);
+      const resultss = result.data.results;
+      console.log(`Total Contacts`, resultss?.length);
+      console.log(resultss);
+      if (!resultss || resultss.length === 0) {
+        return "No contacts found.";
+      }
+      const personDATA = resultss[0]?.person;
+      const displayName = personDATA?.names?.[0]?.displayName;
+      const emailAddress = personDATA?.emailAddresses?.[0]?.value;
+      if (!emailAddress) {
+        return "No email Address found of the given  contact";
+      }
+      console.log({ displayName, emailAddress });
+      return { displayName, emailAddress }; // these data will go to the llm then
+    } catch (err) {
+      console.log(err);
+    }
+  },
+  {
+    name: "search_googel_contact",
+    description:
+      "Search the user's Google Contacts by name and return the contact's email address.",
+    schema: z.object({
+      query: z.string().describe("The name of the person to search for"),
+    }),
   },
 );

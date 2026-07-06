@@ -1,15 +1,14 @@
 import express from "express";
+import { oauth2Client } from "./oauth.ts";
 const app = express();
 import { google } from "googleapis";
 //=======================integrating google api //-========================
-export const oauth2Client = new google.auth.OAuth2(
-  process.env.CLIENT_ID,
-  process.env.CLIENT_SECRET,
-  process.env.YOUR_REDIRECT_URL,
-);
 //===============================
 app.get("/auth", (req, res) => {
-  const scopes = ["https://www.googleapis.com/auth/calendar"];
+  const scopes = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/contacts.readonly",
+  ]; // here we telling google which intergration we are using
 
   const link = oauth2Client.generateAuthUrl({
     // 'online' (default) or 'offline' (gets refresh_token)
@@ -20,12 +19,16 @@ app.get("/auth", (req, res) => {
   res.redirect(link);
 });
 app.get("/callback", async (req, res) => {
-  const code = req.query.code as string;
-  const { tokens } = await oauth2Client.getToken(code);
-  console.log(tokens);
-  res.send(
-    "verification Done , Access has been granted :,you can close the TAB✅",
-  );
+  try {
+    const code = req.query.code as string;
+    const { tokens } = await oauth2Client.getToken(code);
+    console.log(tokens);
+    res.send(
+      "verification Done , Access has been granted :,you can close the TAB✅",
+    );
+  } catch (err) {
+    console.log(err);
+  }
 
   // now we want to send , code+ client id+ client secret as response to the consrent screen
 });

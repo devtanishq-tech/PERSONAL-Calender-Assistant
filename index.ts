@@ -1,5 +1,11 @@
 import { ChatGroq } from "@langchain/groq";
-import { getEventTool, createEventTool } from "./tools.ts";
+import {
+  getEventTool,
+  createEventTool,
+  tavilySearchTool,
+  googelContactSearch,
+} from "./tools.ts";
+import { SystemMessage } from "@langchain/core/messages";
 import {
   StateGraph,
   MessagesAnnotation,
@@ -11,17 +17,33 @@ import { MemorySaver } from "@langchain/langgraph";
 import { context } from "@langchain/core/utils/context";
 import readline from "readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-const tools = [getEventTool, createEventTool];
+
+//=====
+const SYSTEM_PROMPT = new SystemMessage(`
+You are an AI assistant.
+
+Use the webSearch tool only when current information is required.
+
+After receiving search results, answer the user's question immediately.
+
+Do NOT repeatedly call the webSearch tool unless the previous search clearly failed.
+`);
+//======
+const tools = [
+  getEventTool,
+  createEventTool,
+  tavilySearchTool,
+  googelContactSearch,
+];
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.
   model: "openai/gpt-oss-120b",
   temperature: 0,
 }).bindTools(tools);
-console.log(`Hello  there `);
 //=================Creation of the Nodes first //====================
 // basically here typescript asking you what the type of the paramters you are using here
 async function llmNODE(state: typeof MessagesAnnotation.State) {
-  const llmCALL = await llm.invoke(state.messages);
+  const llmCALL = await llm.invoke([SYSTEM_PROMPT, ...state.messages]);
   console.log(llmCALL);
   return { messages: [llmCALL] };
 }
