@@ -4,15 +4,21 @@ import { google } from "googleapis";
 import { oauth2Client } from "./oauth.ts";
 import { TavilySearch } from "@langchain/tavily";
 import { v4 as uuidv4 } from "uuid";
+import { ChatGroq } from "@langchain/groq";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { safebrowsing } from "googleapis/build/src/apis/safebrowsing/index";
 import { concatArrayBuffers } from "bun";
+import { az } from "zod/locales";
 //===============================Google calender inetegration inside the tools FUNCTIONS
 const search = new TavilySearch({
   maxResults: 5,
   topic: "general",
 });
+//===================Google integration//===============================
 const calendar = google.calendar({ version: "v3", auth: oauth2Client }); // Google Calender
 const contact = google.people({ version: "v1", auth: oauth2Client }); // Google Contact
+const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+//========================================================================
 oauth2Client.setCredentials({
   access_token: process.env.GOOGLE_ACCESS_TOKEN,
   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
@@ -262,3 +268,49 @@ export const googelContactSearch = tool(
   },
 );
 //================After this implemenatation of geneartion of email content //======================
+const llm = new ChatGroq({
+  apiKey: process.env.GROQ_API_KEY, // Default value.
+  model: "openai/gpt-oss-120b",
+  temperature: 0,
+});
+const EmailDraftSchema = z.object({
+  recipientName: z.string(),
+  subject: z.string(),
+  bodyContent: z.string(),
+});
+const EMAIL_SYSTM_pROMPT = new SystemMessage(`
+
+You are an expert email writer.
+
+Rewrite the user's request into a professional email.
+
+Fix grammar.
+
+Improve wording.
+
+Generate a concise subject.
+
+Return ONLY JSON.
+
+`);
+export const composeEmailTool = tool(
+  async ({ query }) => {
+    const structuredLLM = llm.withStructuredOutput(EmailDraftSchema);
+    const response = await structuredLLM.invoke([
+      EMAIL_SYSTM_pROMPT,
+      new HumanMessage(query),
+    ]);
+    console.log(`response return by the composeEmail tool Below --------`);
+    console.log(response);
+    return response;
+  },
+  {
+    name: "compose_email",
+    description: "Compose a professional email.",
+    schema: z.object({
+      query: z
+        .string()
+        .describe("The user's natural language request describing the email."),
+    }),
+  },
+);

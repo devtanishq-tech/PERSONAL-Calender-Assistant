@@ -8,6 +8,9 @@ app.get("/auth", (req, res) => {
   const scopes = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/contacts.readonly",
+    // Gmail Permissions
+    // "https://www.googleapis.com/auth/gmail.modify",
+    // "https://www.googleapis.com/auth/gmail.send",
   ]; // here we telling google which intergration we are using
 
   const link = oauth2Client.generateAuthUrl({

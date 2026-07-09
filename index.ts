@@ -5,6 +5,7 @@ import {
   tavilySearchTool,
   googelContactSearch,
   deleteTool,
+  composeEmailTool,
 } from "./tools.ts";
 import { SystemMessage } from "@langchain/core/messages";
 import {
@@ -43,6 +44,7 @@ const tools = [
   tavilySearchTool,
   googelContactSearch,
   deleteTool,
+  composeEmailTool,
 ];
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.
