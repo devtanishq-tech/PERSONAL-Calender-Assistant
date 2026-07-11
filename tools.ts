@@ -1,5 +1,5 @@
 import { tool } from "@langchain/core/tools";
-import { date, string, z } from "zod";
+import { date, string, success, z } from "zod";
 import { google } from "googleapis";
 import { oauth2Client } from "./oauth.ts";
 import { TavilySearch } from "@langchain/tavily";
@@ -25,58 +25,32 @@ oauth2Client.setCredentials({
 });
 //
 //========================================get Event tools //==================================
+
 const EventSchema = z.object({
-  summary: z
-    .string()
-    .describe(
-      "Title of the calendar event, such as 'Team Meeting' or 'Doctor Appointment'.",
-    ),
+  summary: z.string().describe("Event title."),
   start: z.object({
     dateTime: z
       .string()
-      .describe(
-        "The start date and time of the event in RFC3339 format. Example: 2026-07-05T10:00:00+05:30 or 2026-07-05T04:30:00Z.",
-      ),
-    timeZone: z
-      .string()
-      .describe(
-        "The IANA time zone of the event. Example: Asia/Kolkata, America/New_York, Europe/London.",
-      ),
+      .describe("Start, RFC3339 (e.g. 2026-07-05T10:00:00+05:30)."),
+    timeZone: z.string().describe("IANA timezone, e.g. Asia/Kolkata."),
   }),
   end: z.object({
     dateTime: z
       .string()
-      .describe(
-        "The end date and time of the event in RFC3339 format. Example: 2026-07-05T11:00:00+05:30 or 2026-07-05T05:30:00Z.",
-      ),
-    timeZone: z
-      .string()
-      .describe(
-        "The IANA time zone of the event. Example: Asia/Kolkata, America/New_York, Europe/London.",
-      ),
+      .describe("End, RFC3339 (e.g. 2026-07-05T11:00:00+05:30)."),
+    timeZone: z.string().describe("IANA timezone, e.g. Asia/Kolkata."),
   }),
-  description: z
-    .string()
-    .optional()
-    .describe("Optional details or agenda for the event."),
+  description: z.string().optional().describe("Event details (optional)."),
   attendees: z
     .array(
       z.object({
         email: z
           .string()
-          .describe(
-            "The attendee's email address. Use the address exactly as given by the user if they provided one, or the emailAddress from a search_googel_contact result if the email was looked up.",
-          ),
-        displayName: z
-          .string()
-          .describe(
-            "The attendee's display name exactly as mentioned by the user. If the user explicitly provides a display name, preserve it.",
-          ),
+          .describe("Attendee email — from user or search_googel_contact."),
+        displayName: z.string().describe("Attendee name as stated by user."),
       }),
     )
-    .describe(
-      "Complete list of attendees to invite. Extract every attendee mentioned by the user. For each attendee, include both the email address and display name. If the user requests that someone be invited, never omit them. Return an empty array only when no attendees are mentioned.",
-    ),
+    .describe("Attendees to invite. Empty array if none mentioned."),
 });
 type EventData = z.infer<typeof EventSchema>;
 
@@ -110,17 +84,11 @@ export const getEventTool = tool(
   },
   {
     name: "getEvent",
-    description: "Search calendar events matching a query.",
+    description: "Search calendar events by keyword/date range.",
     schema: z.object({
-      query: z.string().describe("Search keyword for the calendar event."),
-      timeMin: z
-        .string()
-        .optional()
-        .describe("Start of the search window in RFC3339 format."),
-      timeMax: z
-        .string()
-        .optional()
-        .describe("End of the search window in RFC3339 format."),
+      query: z.string().describe("Search keyword."),
+      timeMin: z.string().optional().describe("Window start, RFC3339."),
+      timeMax: z.string().optional().describe("Window end, RFC3339."),
     }),
   },
 );
@@ -165,7 +133,7 @@ export const createEventTool = tool(
   {
     name: "create_calender_event",
     description:
-      "Use this tool to create a new calendar event or meeting. Call this tool whenever the user asks to schedule, book, arrange, add, or create an event in their calendar. Examples include meetings, interviews, appointments, reminders, or any event with a specified date, time, or location. Extract every event detail mentioned by the user, including the title, description, start time, end time, time zone, and attendees. If the user asks to invite one or more people, always extract every attendee's email address and display name and include them in the attendees array. Never omit an attendee when an invitation is requested. Return an empty attendees array only if the user does not mention anyone to invite.",
+      "Create a calendar event/meeting. Extract title, times, timezone, description, attendees. Resolve unknown attendee emails via search_googel_contact first — never invent. Empty attendees array if none mentioned.",
     schema: EventSchema,
   },
 );
@@ -195,10 +163,9 @@ export const deleteTool = tool(
   },
   {
     name: "delete_Event",
-    description:
-      "Delete an event from the user's Google Calendar. Use this tool when the user wants to delete, cancel, or remove a calendar event. The tool accepts a search query, searches for matching events in the user's calendar, identifies the appropriate event, and deletes it.",
+    description: "Search calendar events by query and delete the first match.",
     schema: z.object({
-      query: z.string(),
+      query: z.string().describe("Search keyword for the event to delete."),
     }),
   },
 );
@@ -213,11 +180,8 @@ export const tavilySearchTool = tool(
   },
   {
     name: "webSearch",
-    description:
-      "Search the web for current information such as news, facts, recent events, or topics not available in the model's knowledge.",
-    schema: z.object({
-      query: z.string().describe("The search query to execute."),
-    }),
+    description: "Web search for current info not otherwise known.",
+    schema: z.object({ query: z.string().describe("Search query.") }),
   },
 );
 
@@ -261,10 +225,8 @@ export const googelContactSearch = tool(
   {
     name: "search_googel_contact",
     description:
-      "Search the user's Google Contacts by name and return the best matching contact's display name, email address, and phone number.",
-    schema: z.object({
-      query: z.string().describe("The name of the person to search for"),
-    }),
+      "Look up a contact's name, email, and phone by name. A missing field means it isn't saved, not that the contact wasn't found.",
+    schema: z.object({ query: z.string().describe("Person's name.") }),
   },
 );
 //================After this implemenatation of geneartion of email content //======================
@@ -273,25 +235,17 @@ const llm = new ChatGroq({
   model: "openai/gpt-oss-120b",
   temperature: 0,
 });
+const SENDER_NAME = process.env.SENDER_NAME || "Tanishq";
 const EmailDraftSchema = z.object({
   recipientName: z.string(),
   subject: z.string(),
-  bodyContent: z.string(),
+  bodycontent: z.string(),
 });
 const EMAIL_SYSTM_pROMPT = new SystemMessage(`
-
-You are an expert email writer.
-
-Rewrite the user's request into a professional email.
-
-Fix grammar.
-
-Improve wording.
-
-Generate a concise subject.
-
+Rewrite the user's request into a professional email: fix grammar, improve wording, write a concise subject.
+Sender: ${SENDER_NAME}. Close with a proper sign-off and the real name "${SENDER_NAME}" — no placeholders like "[Your Name]".
+Use plain straight apostrophes only, no smart quotes.
 Return ONLY JSON.
-
 `);
 export const composeEmailTool = tool(
   async ({ query }) => {
@@ -306,16 +260,23 @@ export const composeEmailTool = tool(
   },
   {
     name: "compose_email",
-    description: "Compose a professional email.",
+    description:
+      "Mandatory first step for any email send, even if the user already wrote the subject/body. Returns polished recipientName, subject, bodycontent.",
     schema: z.object({
-      query: z
-        .string()
-        .describe("The user's natural language request describing the email."),
+      query: z.string().describe("User's raw email request."),
     }),
   },
 );
 // creation of email content using function
 //=====================================================================================
+///========================================Helper Funciton
+function encodeHeaderValue(value: string): string {
+  const isAscii = /^[\x00-\x7F]*$/.test(value);
+  if (isAscii) return value;
+  const base64 = Buffer.from(value, "utf-8").toString("base64");
+  return `=?UTF-8?B?${base64}?=`;
+}
+//==============================Helper Function//=========================================
 function sendMessageFunction({
   to,
   subject,
@@ -326,13 +287,15 @@ function sendMessageFunction({
   bodycontent: string;
 }) {
   const emailData = [
-    'Content-Type: text/plain; charset="UTF-8"\n',
-    "MIME-Version: 1.0\n",
-    `to:${to}`,
-    `from :tanishqcoc24@gmail.com\n`,
-    `subject:${subject}`,
-    `${bodycontent}`,
-  ].join("");
+    `To: ${to}`,
+    `From: ${encodeHeaderValue(SENDER_NAME)} <tanishqcoc24@gmail.com>`,
+    `Subject: ${encodeHeaderValue(subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    "",
+    bodycontent,
+  ].join("\r\n");
+  console.log(`Raw email data before encoding`);
   return Buffer.from(emailData)
     .toString("base64")
     .replace(/\+/g, "-")
@@ -353,16 +316,26 @@ const SendEmailSchema = z.object({
 export const send_Email = tool(
   async ({ to, subject, bodycontent }) => {
     try {
+      console.log(`Send Email tool is being called ...........`);
       const raw = sendMessageFunction({ to, subject, bodycontent });
+      console.log(raw);
       const response = await gmail.users.messages.send({
         userId: "me",
         requestBody: {
           raw, // this is where we are sending our message to the gmail
         },
       });
-      console.log(`Send Email tool is being called ...........`);
+      console.log(
+        `Email has been sended , now below is response data prinited `,
+      );
+
       console.log(response.data);
-      return "searchdata";
+      return {
+        success: true,
+        threadId: response.data.threadId,
+        messageId: response.data.id,
+        messages: `Email has been successFully send to this  email id :${to}`,
+      };
     } catch (err) {
       console.log(`some error occur in sending email here `);
       console.log(err);
@@ -370,20 +343,8 @@ export const send_Email = tool(
   },
   {
     name: "send_email",
-    description: `
-Send an email using the user's Gmail account.
-
-Use this tool only after the email subject and body have been prepared.
-
-If the user provides an email address directly, use it exactly.
-
-If the user mentions a contact name but does not provide an email address,
-first call search_googel_contact.
-
-Never invent an email address.
-
-The subject and bodyContent may come from compose_email.
-`,
-    schema: SendEmailSchema,
+    description:
+      "Send email via Gmail. Must run after compose_email — never first. Use its subject/bodycontent unchanged. If a named contact has no email, resolve via search_googel_contact first. Never invent an email.",
+    schema: SendEmailSchema, // add short describe()s: to: "Recipient email.", subject: "Email subject.", bodycontent: "Email body."
   },
 );
