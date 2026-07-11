@@ -348,3 +348,22 @@ export const send_Email = tool(
     schema: SendEmailSchema, // add short describe()s: to: "Recipient email.", subject: "Email subject.", bodycontent: "Email body."
   },
 );
+const search_Email = tool(
+  async ({ query }) => {
+    const response = await gmail.users.messages.list({
+      userId: "me",
+      q: query,
+    });
+    const data = response.data.messages || [];
+    console.log(data);
+    //basically this is an array here
+    if (data.length == 0) {
+      return "no data found";
+    }
+    return "emailSearch happen";
+  },
+  {
+    name: "search_Email",
+    description: "used to search content ",
+  },
+);
