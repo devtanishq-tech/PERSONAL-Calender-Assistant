@@ -314,3 +314,76 @@ export const composeEmailTool = tool(
     }),
   },
 );
+// creation of email content using function
+//=====================================================================================
+function sendMessageFunction({
+  to,
+  subject,
+  bodycontent,
+}: {
+  to: string;
+  subject: string;
+  bodycontent: string;
+}) {
+  const emailData = [
+    'Content-Type: text/plain; charset="UTF-8"\n',
+    "MIME-Version: 1.0\n",
+    `to:${to}`,
+    `from :tanishqcoc24@gmail.com\n`,
+    `subject:${subject}`,
+    `${bodycontent}`,
+  ].join("");
+  return Buffer.from(emailData)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+// basically this function will return a raw text
+const SendEmailSchema = z.object({
+  to: z
+    .string()
+    .describe(
+      "Recipient email address. Use the email provided by the user or returned by search_googel_contact.",
+    ),
+  subject: z.string().describe("The subject of the email."),
+  bodycontent: z.string().describe("The complete email body content."),
+});
+//======================================================================================
+export const send_Email = tool(
+  async ({ to, subject, bodycontent }) => {
+    try {
+      const raw = sendMessageFunction({ to, subject, bodycontent });
+      const response = await gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw, // this is where we are sending our message to the gmail
+        },
+      });
+      console.log(`Send Email tool is being called ...........`);
+      console.log(response.data);
+      return "searchdata";
+    } catch (err) {
+      console.log(`some error occur in sending email here `);
+      console.log(err);
+    }
+  },
+  {
+    name: "send_email",
+    description: `
+Send an email using the user's Gmail account.
+
+Use this tool only after the email subject and body have been prepared.
+
+If the user provides an email address directly, use it exactly.
+
+If the user mentions a contact name but does not provide an email address,
+first call search_googel_contact.
+
+Never invent an email address.
+
+The subject and bodyContent may come from compose_email.
+`,
+    schema: SendEmailSchema,
+  },
+);

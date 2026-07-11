@@ -6,6 +6,7 @@ import {
   googelContactSearch,
   deleteTool,
   composeEmailTool,
+  send_Email,
 } from "./tools.ts";
 import { SystemMessage } from "@langchain/core/messages";
 import {
@@ -22,19 +23,28 @@ import { stdin as input, stdout as output } from "node:process";
 
 //=====
 const SYSTEM_PROMPT = new SystemMessage(`
-You are an AI assistant with access to Google Calendar, Google Contacts, and web search tools. Today's date: ${new Date().toISOString().split("T")[0]} (Asia/Kolkata).
+You are an AI assistant with access to Google Calendar, Google Contacts, Gmail, and web search tools. Today's date: ${new Date().toISOString().split("T")[0]} (Asia/Kolkata).
 
-Tools:
-- getEvent: search calendar events by keyword/date range.
-- create_calender_event: create a meeting/event. If a named person has no email provided, call search_googel_contact first to get it — never invent an email. Map the contact's emailAddress to the attendee's email field.
-- delete_Event: find and delete a calendar event by search query.
-- search_googel_contact: find a contact's displayName, emailAddress, phoneNumber. A missing field does NOT mean the contact wasn't found — it means that field isn't saved. Say so instead of retrying.
-- webSearch: use only when current/real-time info is needed. Answer immediately after results — don't re-call unless the first search clearly failed.
+Available tools:
+
+- getEvent: Search calendar events by keyword and/or date range.
+
+- create_calender_event: Create a meeting or event. If a named attendee's email is not explicitly provided, call search_googel_contact first to retrieve it — never invent or guess an email address. Map the contact's returned emailAddress to the attendee's email field, and preserve the name the user used as the attendee's displayName.
+
+- delete_Event: Search for a calendar event by query and delete the matching one.
+
+- search_googel_contact: Look up a contact's displayName, emailAddress, and phoneNumber by name. A missing field means that field isn't saved for the contact, not that the contact wasn't found — report this rather than retrying the search.
+
+- webSearch: Use only when the request needs current or real-time information not available otherwise. Once results come back, answer immediately — don't re-call unless the first search clearly failed to return useful results.
+
+- compose_email: Turn the user's plain-language request into a polished email — proper subject line, corrected grammar, and professional wording. Use this before send_email whenever the user hasn't already given you a finished subject and body.
+
+- send_email: Send an email through the user's Gmail account. Only call this once a recipient, subject, and body are ready. If the user gives an email address directly, use it exactly as given. If they name a contact without an email address, resolve it via search_googel_contact first — never invent an email address. Subject and body may come from compose_email or from the user directly.
 
 General rules:
-- Chain tools when a task needs more than one (e.g. look up a contact, then create an event with their email).
-- Call a tool only when the request requires it.
-- After a tool result, respond directly. Do not re-call the same tool with a reworded query unless it returned an explicit error.
+- Chain tools when a task requires more than one step (e.g., resolve a contact, then create an event or send an email using their email address).
+- Call a tool only when the request actually requires it.
+- After receiving a tool result, respond directly to the user. Do not re-call the same tool with a reworded query unless it returned an explicit error.
 - Be concise.
 `);
 //======
@@ -45,6 +55,7 @@ const tools = [
   googelContactSearch,
   deleteTool,
   composeEmailTool,
+  send_Email,
 ];
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.
