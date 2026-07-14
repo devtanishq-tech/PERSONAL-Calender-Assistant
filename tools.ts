@@ -232,8 +232,9 @@ export const googelContactSearch = tool(
 //================After this implemenatation of geneartion of email content //======================
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.
-  model: "openai/gpt-oss-120b",
+  model: "llama-3.1-8b-instant",
   temperature: 0,
+  maxTokens: 400,
 });
 const SENDER_NAME = process.env.SENDER_NAME || "Tanishq";
 const EmailDraftSchema = z.object({
@@ -364,6 +365,6 @@ const search_Email = tool(
   },
   {
     name: "search_Email",
-    description: "used to search content ",
+    description: "used to search content",
   },
 );
