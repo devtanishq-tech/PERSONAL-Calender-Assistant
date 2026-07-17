@@ -8,7 +8,7 @@ import { ChatGroq } from "@langchain/groq";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { safebrowsing } from "googleapis/build/src/apis/safebrowsing/index";
 import { concatArrayBuffers } from "bun";
-import { az } from "zod/locales";
+import { az, da } from "zod/locales";
 //===============================Google calender inetegration inside the tools FUNCTIONS
 const search = new TavilySearch({
   maxResults: 5,
@@ -340,6 +340,7 @@ export const send_Email = tool(
     } catch (err) {
       console.log(`some error occur in sending email here `);
       console.log(err);
+      throw err;
     }
   },
   {
@@ -349,22 +350,109 @@ export const send_Email = tool(
     schema: SendEmailSchema, // add short describe()s: to: "Recipient email.", subject: "Email subject.", bodycontent: "Email body."
   },
 );
-const search_Email = tool(
+const retervialFunction = async (message: any[]) => {
+  try {
+    const emailDATA = await Promise.all(
+      message.map(async (current) => {
+        const email = await gmail.users.messages.get({
+          userId: "me",
+          id: current.id,
+          format: "metadata",
+          metadataHeaders: ["From", "To", "Subject", "Date", "Message-ID"],
+        });
+        const headers = email.data.payload?.headers ?? [];
+        const getHeader = (name: string) => {
+          return headers.find(
+            (current) => current.name?.toLowerCase() === name.toLowerCase(),
+          )?.value;
+        };
+        return {
+          messaageId: email.data.id,
+          TO: getHeader("To"),
+          From: getHeader("From"),
+          Subject: getHeader("Subject"),
+          date: getHeader("Date"),
+          messageIdHeader: getHeader("Message-ID"),
+          snippet: email.data.snippet,
+        };
+      }),
+    );
+    return emailDATA;
+  } catch (err) {
+    console.log(`Some error has occur here ..................`);
+    console.log(err);
+    throw err;
+  }
+  //=======================================================End //=================================
+  //====================================/
+  // message.map(async (current) => {
+  //   // here means we are extarcting data from each array of data
+  //   const email = await gmail.users.messages.get({
+  //     userId: "me",
+  //     id: current.id,
+  //     format: "metadata", //  what type of data you have requested based on that it respond -
+  //     metadataHeaders: ["From", "To", "Subject", "Date", "Message-ID"],
+  //   });
+  //   console.log(`//=================================================//`);
+  //   console.log(`//=================================================//`);
+  //   console.log(`//=================================================//`);
+  //   console.log(email);
+  //   const header = email.data.payload?.headers ?? [];
+  //   const getFunction = (name: string) => {
+  //     return header.find((currentidx) => {
+  //       currentidx.name?.toLowerCase() === name.toLowerCase();
+  //     })?.value;
+  //   };
+  //   return {
+  //     messageID: email.data.id,
+  //     TO: getFunction("To"),
+  //     FROM: getFunction("From"),
+  //     Subject: getFunction("Subject"),
+  //     date: getFunction("Date"),
+  //     messageIdHeader: getFunction("Message-ID"),
+  //     snippet: email.data.snippet,
+  //   };
+  // });
+};
+export const search_Email = tool(
   async ({ query }) => {
-    const response = await gmail.users.messages.list({
-      userId: "me",
-      q: query,
-    });
-    const data = response.data.messages || [];
-    console.log(data);
-    //basically this is an array here
-    if (data.length == 0) {
-      return "no data found";
+    console.log(`QUERY RECEVIED BY LLM `, query);
+    console.log(`============================================================`);
+    console.log(`Search_tool is called .....`);
+    try {
+      const response = await gmail.users.messages.list({
+        userId: "me",
+        q: query,
+        maxResults: 3,
+      });
+      const data = response.data.messages || [];
+      if (data.length == 0) {
+        return "Searched Email does not exist ";
+      }
+      // this data contains array  of thread id and message id
+      console.log(`Search data has been Printed Below =------------ `);
+      console.log(data);
+      const FinalAns = await retervialFunction(data);
+      return {
+        status: "Email Found",
+        totalEmail: FinalAns.length,
+        FinalAns,
+      };
+    } catch (err) {
+      console.log(`Some error has occured here `);
+      console.log(err);
+      throw err;
     }
-    return "emailSearch happen";
   },
   {
     name: "search_Email",
-    description: "used to search content",
+    description: `
+"Search Gmail. Syntax: from:x@y.com, subject:text, is:unread, after:2026/07/01. Use to find/check emails.",
+`,
+    schema: z.object({
+      query: z
+        .string()
+        .describe("Gmail search query using Gmail search syntax."),
+    }),
   },
 );

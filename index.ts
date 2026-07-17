@@ -7,6 +7,7 @@ import {
   deleteTool,
   composeEmailTool,
   send_Email,
+  search_Email,
 } from "./tools.ts";
 import { SystemMessage } from "@langchain/core/messages";
 import {
@@ -33,6 +34,7 @@ Tools:
 - webSearch: only for info not otherwise known; don't re-call unless it failed.
 - compose_email: mandatory first step for any email send, even with user-written text.
 - send_email: send via Gmail; must follow compose_email, using its subject/bodycontent unchanged.
+- search_Email: search Gmail by keyword/sender/date; returns matching email metadata.
 
 Rules:
 - Email flow: compose_email → (search_googel_contact if needed) → send_email. Never send_email first.
@@ -49,6 +51,7 @@ const tools = [
   deleteTool,
   composeEmailTool,
   send_Email,
+  search_Email,
 ];
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.
