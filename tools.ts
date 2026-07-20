@@ -297,6 +297,7 @@ function sendMessageFunction({
     bodycontent,
   ].join("\r\n");
   console.log(`Raw email data before encoding`);
+  // this  will return a raw document here
   return Buffer.from(emailData)
     .toString("base64")
     .replace(/\+/g, "-")
@@ -304,6 +305,7 @@ function sendMessageFunction({
     .replace(/=+$/, "");
 }
 // basically this function will return a raw text
+//=========== this is the schema of agument meaning //
 const SendEmailSchema = z.object({
   to: z
     .string()
@@ -367,7 +369,7 @@ const retervialFunction = async (message: any[]) => {
           )?.value;
         };
         return {
-          messaageId: email.data.id,
+          messageId: email.data.id,
           TO: getHeader("To"),
           From: getHeader("From"),
           Subject: getHeader("Subject"),
@@ -383,36 +385,6 @@ const retervialFunction = async (message: any[]) => {
     console.log(err);
     throw err;
   }
-  //=======================================================End //=================================
-  //====================================/
-  // message.map(async (current) => {
-  //   // here means we are extarcting data from each array of data
-  //   const email = await gmail.users.messages.get({
-  //     userId: "me",
-  //     id: current.id,
-  //     format: "metadata", //  what type of data you have requested based on that it respond -
-  //     metadataHeaders: ["From", "To", "Subject", "Date", "Message-ID"],
-  //   });
-  //   console.log(`//=================================================//`);
-  //   console.log(`//=================================================//`);
-  //   console.log(`//=================================================//`);
-  //   console.log(email);
-  //   const header = email.data.payload?.headers ?? [];
-  //   const getFunction = (name: string) => {
-  //     return header.find((currentidx) => {
-  //       currentidx.name?.toLowerCase() === name.toLowerCase();
-  //     })?.value;
-  //   };
-  //   return {
-  //     messageID: email.data.id,
-  //     TO: getFunction("To"),
-  //     FROM: getFunction("From"),
-  //     Subject: getFunction("Subject"),
-  //     date: getFunction("Date"),
-  //     messageIdHeader: getFunction("Message-ID"),
-  //     snippet: email.data.snippet,
-  //   };
-  // });
 };
 export const search_Email = tool(
   async ({ query }) => {
@@ -446,13 +418,79 @@ export const search_Email = tool(
   },
   {
     name: "search_Email",
-    description: `
-"Search Gmail. Syntax: from:x@y.com, subject:text, is:unread, after:2026/07/01. Use to find/check emails.",
-`,
+    description: `Search Gmail. Syntax: from:x@y.com, subject:text, is:unread, after:2026/07/01. Returns metadata only (subject, sender, date, snippet) — call read_email with the returned messageId for full body content.`,
     schema: z.object({
       query: z
         .string()
         .describe("Gmail search query using Gmail search syntax."),
+    }),
+  },
+);
+//===================REAL EMAIL tools integration here //==============================
+function debugQueryFuction(data?: string) {
+  if (!data) {
+    return "";
+  }
+  return Buffer.from(data, "base64url").toString("utf-8");
+}
+function extractCONTENT(payload: any): string {
+  //it means this function must return a value in strings
+  if (!payload) {
+    return "";
+  }
+  // this is the case, where both needed to be present
+  if (payload.mimeType === "text/plain" && payload.body?.data) {
+    return debugQueryFuction(payload.body.data);
+  }
+  // this is the case where inside parts data existed
+  if (payload.parts) {
+    for (let part of payload.parts) {
+      const body = extractCONTENT(part);
+
+      if (body) {
+        return body;
+      }
+    }
+  }
+  // and this is the case where data existed only inside the payload.body/data
+  if (payload.body?.data) {
+    return debugQueryFuction(payload.body.data);
+  }
+  return "";
+}
+const read_EMAIL = tool(
+  async ({ messageId }) => {
+    try {
+      const gmailData = await gmail.users.messages.get({
+        userId: "me",
+        id: messageId,
+        format: "full", // this allow to extratc full data from the gmail api
+      });
+      console.log(
+        `Below is gmail Data return by the gmail --------------------------------`,
+      );
+      console.log(gmailData);
+      console.log(
+        `ABove is gmail Data return by the gmail -------------------`,
+      );
+      const payload = gmailData.data?.payload;
+      const bodyContent = extractCONTENT(payload);
+      return {
+        messageId,
+        bodyContent,
+      };
+    } catch (err) {
+      console.log(`some error has occur inside the read-Email tool`);
+      console.log(err);
+      throw err;
+    }
+  },
+  {
+    name: "read_email",
+    description:
+      "Fetch full body text of one email by message ID. Call after search_Email when the user wants content, not just metadata. ",
+    schema: z.object({
+      messageId: z.string().describe("Message ID from search_Email results."),
     }),
   },
 );

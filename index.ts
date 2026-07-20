@@ -35,12 +35,14 @@ Tools:
 - compose_email: mandatory first step for any email send, even with user-written text.
 - send_email: send via Gmail; must follow compose_email, using its subject/bodycontent unchanged.
 - search_Email: search Gmail by keyword/sender/date; returns matching email metadata.
+- read_email: get full body text of one email via messageId from search_Email; use when user needs content, not just metadata.
 
 Rules:
 - Email flow: compose_email → (search_googel_contact if needed) → send_email. Never send_email first.
 - Chain tools as needed (e.g. resolve contact → create event/send email).
 - Only call a tool when needed; don't re-call with a reworded query unless it errored.
 - Be concise.
+- Email content flow: search_Email → read_email (only if body text is needed, not just subject/sender/date).
 `);
 //======
 const tools = [
