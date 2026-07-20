@@ -8,6 +8,7 @@ import {
   composeEmailTool,
   send_Email,
   search_Email,
+  read_EMAIL,
 } from "./tools.ts";
 import { SystemMessage } from "@langchain/core/messages";
 import {
@@ -54,6 +55,7 @@ const tools = [
   composeEmailTool,
   send_Email,
   search_Email,
+  read_EMAIL,
 ];
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY, // Default value.

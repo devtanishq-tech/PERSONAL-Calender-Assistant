@@ -395,7 +395,7 @@ export const search_Email = tool(
       const response = await gmail.users.messages.list({
         userId: "me",
         q: query,
-        maxResults: 3,
+        maxResults: 1,
       });
       const data = response.data.messages || [];
       if (data.length == 0) {
@@ -458,7 +458,7 @@ function extractCONTENT(payload: any): string {
   }
   return "";
 }
-const read_EMAIL = tool(
+export const read_EMAIL = tool(
   async ({ messageId }) => {
     try {
       const gmailData = await gmail.users.messages.get({
